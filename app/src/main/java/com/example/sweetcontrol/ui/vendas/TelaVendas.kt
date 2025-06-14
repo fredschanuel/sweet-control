@@ -1,5 +1,6 @@
 package com.example.sweetcontrol.ui.vendas
 
+import android.util.Log
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -44,6 +45,7 @@ import com.example.sweetcontrol.models.ItemVenda
 import com.example.sweetcontrol.models.Venda
 import com.example.sweetcontrol.ui.components.convertToReal
 import com.google.firebase.database.DatabaseReference
+import kotlin.math.max
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -86,6 +88,53 @@ fun TelaVendas(database: DatabaseReference, modifier: Modifier = Modifier) {
                 Toast.makeText(context, "Erro ao carregar vendas: ${error.message}", Toast.LENGTH_SHORT).show()
             }
         })
+    }
+
+    fun verificarEstoque(itensVenda: List<ItemVenda>, onResult: (Boolean) -> Unit) {
+        val checks = mutableListOf<Boolean>()
+
+        itensVenda.forEach { item ->
+            database.child("producoes")
+                .orderByChild("tipo").equalTo(item.produto)
+                .addListenerForSingleValueEvent(object : com.google.firebase.database.ValueEventListener {
+                    override fun onDataChange(snapshot: com.google.firebase.database.DataSnapshot) {
+                        val quantidadeAtual = snapshot.children.firstOrNull()
+                            ?.child("quantidade")?.getValue(Int::class.java) ?: 0
+
+                        checks.add(quantidadeAtual >= item.quantidade)
+
+                        if (checks.size == itensVenda.size) {
+                            onResult(checks.all { it })
+                        }
+                    }
+
+                    override fun onCancelled(error: com.google.firebase.database.DatabaseError) {
+                        checks.add(false)
+                        if (checks.size == itensVenda.size) {
+                            onResult(false)
+                        }
+                    }
+                })
+        }
+    }
+
+    fun atualizarEstoqueSimplificado(itensVenda: List<ItemVenda>) {
+        itensVenda.forEach { item ->
+            database.child("producoes")
+                .orderByChild("tipo").equalTo(item.produto)
+                .addListenerForSingleValueEvent(object : com.google.firebase.database.ValueEventListener {
+                    override fun onDataChange(snapshot: com.google.firebase.database.DataSnapshot) {
+                        snapshot.children.firstOrNull()?.let { produtoSnapshot ->
+                            val quantidadeAtual = produtoSnapshot.child("quantidade").getValue(Int::class.java) ?: 0
+                            val novaQuantidade = max(0, quantidadeAtual - item.quantidade)
+                            produtoSnapshot.ref.child("quantidade").setValue(novaQuantidade)
+                        }
+                    }
+                    override fun onCancelled(error: com.google.firebase.database.DatabaseError) {
+                        Log.e("Estoque", "Erro: ${error.message}")
+                    }
+                })
+        }
     }
 
     Column(
@@ -282,25 +331,28 @@ fun TelaVendas(database: DatabaseReference, modifier: Modifier = Modifier) {
             Button(
                 onClick = {
                     if (cliente.isNotEmpty() && itensVenda.isNotEmpty()) {
-                        val id = database.child("vendas").push().key ?: return@Button
-                        val venda = Venda(
-                            id = id,
-                            cliente = cliente,
-                            itens = itensVenda,
-                            valorTotal = totalVenda
-                        )
+                        verificarEstoque(itensVenda) { temEstoque ->
+                            if (temEstoque) {
+                                val id = database.child("vendas").push().key ?: return@verificarEstoque
+                                val venda = Venda(
+                                    id = id,
+                                    cliente = cliente,
+                                    itens = itensVenda,
+                                    data = System.currentTimeMillis(),
+                                    valorTotal = totalVenda
+                                )
 
-                        database.child("vendas").child(id).setValue(venda)
-                            .addOnSuccessListener {
-                                Toast.makeText(context, "Venda registrada!", Toast.LENGTH_SHORT).show()
-                                cliente = ""
-                                itensVenda = emptyList()
+                                database.child("vendas").child(id).setValue(venda)
+                                    .addOnSuccessListener {
+                                        atualizarEstoqueSimplificado(itensVenda)
+                                        Toast.makeText(context, "Venda concluída!", Toast.LENGTH_SHORT).show()
+                                        cliente = ""
+                                        itensVenda = emptyList()
+                                    }
+                            } else {
+                                Toast.makeText(context, "Estoque insuficiente!", Toast.LENGTH_LONG).show()
                             }
-                            .addOnFailureListener {
-                                Toast.makeText(context, "Erro ao registrar venda", Toast.LENGTH_SHORT).show()
-                            }
-                    } else {
-                        Toast.makeText(context, "Adicione itens e informe o cliente", Toast.LENGTH_SHORT).show()
+                        }
                     }
                 },
                 modifier = Modifier.fillMaxWidth()

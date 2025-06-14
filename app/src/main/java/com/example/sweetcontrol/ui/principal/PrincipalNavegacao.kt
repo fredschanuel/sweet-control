@@ -24,7 +24,7 @@ fun PrincipalNavegacao(
     ) {
         composable("dashboard") {
             TelaDashboard(
-                database = database,
+                //database = database,
                 onNavigateToProduction = { navController.navigate("producao") },
                 onNavigateToSales = { navController.navigate("vendas") },
                 onNavigateToMaterials = { navController.navigate("materiaprima") }

@@ -25,6 +25,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -32,40 +33,33 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.sweetcontrol.ui.components.convertToReal
 import com.example.sweetcontrol.ui.components.GraficoLinha
 import com.example.sweetcontrol.ui.components.formatData
 import com.example.sweetcontrol.ui.components.SummaryCard
 import com.example.sweetcontrol.models.Producao
 import com.google.firebase.database.DatabaseReference
+import java.util.Calendar
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TelaDashboard(
-    database: DatabaseReference,
     modifier: Modifier = Modifier,
     onNavigateToProduction: () -> Unit,
     onNavigateToSales: () -> Unit,
-    onNavigateToMaterials: () -> Unit
+    onNavigateToMaterials: () -> Unit,
+    viewModel: DashboardViewModel = viewModel()
 ) {
     val context = LocalContext.current
     var selectedPeriod by remember { mutableStateOf("Hoje") }
     var expanded by remember { mutableStateOf(false) }
 
-    val totalProduction by remember { mutableStateOf(125) }
-    val totalSales by remember { mutableStateOf(1200.0) }
-    val totalMaterials by remember { mutableStateOf(580.0) }
-    val profit by remember { mutableStateOf(totalSales - totalMaterials) }
-
-    val recentProductions = remember {
-        listOf(
-            Producao(quantidade = 20, tipo = "Cascão 500g", timestamp = System.currentTimeMillis()),
-            Producao(quantidade = 15, tipo = "Mole 1kg", timestamp = System.currentTimeMillis() - 86400000)
-        )
-    }
+    val dashboardData by viewModel.dashboardData.observeAsState(DashboardData())
+    val recentProductions by viewModel.recentProductions.observeAsState(emptyList())
+    //val chartData by viewModel.chartData.observeAsState(ChartData())
 
     Column(modifier = modifier.padding(16.dp)) {
-
         Row(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
@@ -88,6 +82,7 @@ fun TelaDashboard(
                             onClick = {
                                 selectedPeriod = period
                                 expanded = false
+                                viewModel.updatePeriod(period)
                             }
                         )
                     }
@@ -107,39 +102,39 @@ fun TelaDashboard(
             SummaryCard(
                 icon = Icons.Default.ThumbUp,
                 title = "Produção",
-                value = "$totalProduction un",
+                value = "${dashboardData.totalProduction} un",
                 onClick = onNavigateToProduction
             )
             SummaryCard(
                 icon = Icons.Default.ShoppingCart,
                 title = "Vendas",
-                value = totalSales.convertToReal(),
+                value = dashboardData.totalSales.convertToReal(),
                 onClick = onNavigateToSales
             )
             SummaryCard(
                 icon = Icons.Default.Build,
                 title = "Matéria-Prima",
-                value = totalMaterials.convertToReal(),
+                value = dashboardData.totalMaterials.convertToReal(),
                 onClick = onNavigateToMaterials
             )
             SummaryCard(
                 icon = Icons.Default.ThumbUp,
                 title = "Lucro",
-                value = profit.convertToReal()
+                value = (dashboardData.totalSales - dashboardData.totalMaterials).convertToReal()
             )
         }
 
         Spacer(modifier = Modifier.height(16.dp))
-        Text("Produção vs Vendas (últimos 7 dias)", style = MaterialTheme.typography.titleMedium)
+        //Text("Produção vs Vendas (últimos 7 dias)", style = MaterialTheme.typography.titleMedium)
         Spacer(modifier = Modifier.height(8.dp))
-        GraficoLinha(
-            productionData = listOf(20, 25, 30, 25, 20, 15, 10),
-            salesData = listOf(15, 20, 25, 30, 25, 20, 15),
-            modifier = Modifier
-                .height(150.dp)
-                .fillMaxWidth()
-                .padding(vertical = 8.dp)
-        )
+        //GraficoLinha(
+            //productionData = chartData.productionData,
+            //salesData = chartData.salesData,
+            //modifier = Modifier
+                //.height(150.dp)
+                //.fillMaxWidth()
+                //.padding(vertical = 8.dp)
+        //)
 
         Spacer(modifier = Modifier.height(16.dp))
         Text("Últimas Produções", style = MaterialTheme.typography.titleMedium)
@@ -164,7 +159,3 @@ fun TelaDashboard(
         }
     }
 }
-
-
-
-
